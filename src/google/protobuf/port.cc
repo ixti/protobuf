@@ -5,8 +5,15 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 //
+#include "google/protobuf/port.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <map>
+
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 
 // Must be included last
 #include "google/protobuf/port_def.inc"
@@ -22,6 +29,45 @@ namespace internal {
 void protobuf_assumption_failed(const char* pred, const char* file, int line) {
   fprintf(stderr, "%s: %d: Assumption failed: '%s'\n", file, line, pred);
   abort();
+}
+
+DebugCounter::Map& DebugCounter::CounterMap() {
+  static auto* counter_map = new Map{};
+  static bool dummy = std::atexit(PrintAllCounters);
+  (void)dummy;
+  return *counter_map;
+}
+
+void DebugCounter::PrintAllCounters() {
+  auto& counters = CounterMap();
+  if (counters.empty()) return;
+  absl::FPrintF(stderr, "Protobuf debug counters:\n");
+  for (auto& category : counters) {
+    // Example output:
+    //
+    //   Category  :
+    //     Value 1 : 1234 (12.34%)
+    //     Value 2 : 2345 (23.45%)
+    //     Total   : 3579
+    absl::FPrintF(stderr, "  %-12s:\n", category.first);
+    size_t total = 0;
+    for (auto& count : category.second) {
+      total += count.second->value();
+    }
+    for (auto& count : category.second) {
+      size_t value = count.second->value();
+      absl::FPrintF(stderr, "    %-10s: %10zu", count.first, value);
+      if (category.second.size() > 1) {
+        absl::FPrintF(
+            stderr, " (%5.2f%%)",
+            100. * static_cast<double>(value) / static_cast<double>(total));
+      }
+      absl::FPrintF(stderr, "\n");
+    }
+    if (category.second.size() > 1) {
+      absl::FPrintF(stderr, "    %-10s: %10zu\n", "Total", total);
+    }
+  }
 }
 
 }  // namespace internal

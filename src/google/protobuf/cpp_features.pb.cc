@@ -188,6 +188,9 @@ inline void CppFeatures::SharedDtor() {
   _impl_.~Impl_();
 }
 
+constexpr auto CppFeatures::InternalNewImpl_() {
+  return ::google::protobuf::internal::PlacementNew::ZeroInit();
+}
 PROTOBUF_CONSTINIT
 PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
 const ::google::protobuf::MessageLite::ClassDataFull
@@ -197,13 +200,14 @@ const ::google::protobuf::MessageLite::ClassDataFull
             nullptr,  // OnDemandRegisterArenaDtor
             nullptr,  // IsInitialized
             &CppFeatures::MergeImpl,
+            ::google::protobuf::Message::GetNewImpl<CppFeatures>(),
 #if defined(PROTOBUF_CUSTOM_VTABLE)
             ::google::protobuf::Message::GetDeleteImpl<CppFeatures>(),
-            ::google::protobuf::Message::GetNewImpl<CppFeatures>(),
             ::google::protobuf::Message::GetClearImpl<CppFeatures>(),
                 ::google::protobuf::Message::GetByteSizeLongImpl<CppFeatures>(),
                 ::google::protobuf::Message::GetSerializeImpl<CppFeatures>(),
 #endif  // PROTOBUF_CUSTOM_VTABLE
+            sizeof(CppFeatures),
             PROTOBUF_FIELD_OFFSET(CppFeatures, _impl_._cached_size_),
             false,
         },

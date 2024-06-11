@@ -58,10 +58,6 @@ class PROTOBUF_EXPORT ImplicitWeakMessage final : public MessageLite {
 
   const ClassData* GetClassData() const PROTOBUF_FINAL;
 
-  MessageLite* New(Arena* arena) const PROTOBUF_FINAL {
-    return Arena::Create<ImplicitWeakMessage>(arena);
-  }
-
   void Clear() PROTOBUF_FINAL { data_->clear(); }
 
   size_t ByteSizeLong() const PROTOBUF_FINAL {

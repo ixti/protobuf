@@ -193,6 +193,9 @@ inline void JavaFeatures::SharedDtor() {
   _impl_.~Impl_();
 }
 
+constexpr auto JavaFeatures::InternalNewImpl_() {
+  return ::google::protobuf::internal::PlacementNew::ZeroInit();
+}
 PROTOBUF_CONSTINIT
 PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
 const ::google::protobuf::MessageLite::ClassDataFull
@@ -202,13 +205,14 @@ const ::google::protobuf::MessageLite::ClassDataFull
             nullptr,  // OnDemandRegisterArenaDtor
             nullptr,  // IsInitialized
             &JavaFeatures::MergeImpl,
+            ::google::protobuf::Message::GetNewImpl<JavaFeatures>(),
 #if defined(PROTOBUF_CUSTOM_VTABLE)
             ::google::protobuf::Message::GetDeleteImpl<JavaFeatures>(),
-            ::google::protobuf::Message::GetNewImpl<JavaFeatures>(),
             ::google::protobuf::Message::GetClearImpl<JavaFeatures>(),
                 ::google::protobuf::Message::GetByteSizeLongImpl<JavaFeatures>(),
                 ::google::protobuf::Message::GetSerializeImpl<JavaFeatures>(),
 #endif  // PROTOBUF_CUSTOM_VTABLE
+            sizeof(JavaFeatures),
             PROTOBUF_FIELD_OFFSET(JavaFeatures, _impl_._cached_size_),
             false,
         },

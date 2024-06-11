@@ -132,6 +132,8 @@ class MessageGenerator {
   void GenerateIsInitialized(io::Printer* p);
   bool NeedsIsInitialized();
 
+  NewOp GetNewOp() const;
+
   // Helpers for GenerateSerializeWithCachedSizes().
   //
   // cached_has_bit_index maintains that:

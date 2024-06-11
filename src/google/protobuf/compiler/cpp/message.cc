@@ -1289,6 +1289,8 @@ void MessageGenerator::GenerateMapEntryClassDefinition(io::Printer* p) {
   parse_function_generator_->GenerateDataDecls(p);
   p->Emit(R"cc(
     const $superclass$::ClassData* GetClassData() const PROTOBUF_FINAL;
+    static void* PlacementNew(const void*, void* mem, ::$proto_ns$::Arena* arena);
+    static constexpr auto InternalNewImpl_();
     static const $superclass$::ClassDataFull _class_data_;
   )cc");
   format(
@@ -2002,7 +2004,7 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* p) {
 
           // implements Message ----------------------------------------------
 
-          $classname$* New(::$proto_ns$::Arena* arena = nullptr) const PROTOBUF_FINAL {
+          $classname$* New(::$proto_ns$::Arena* arena = nullptr) const {
             return $superclass$::DefaultConstruct<$classname$>(arena);
           }
           $generated_methods$;
@@ -2026,6 +2028,8 @@ void MessageGenerator::GenerateClassDefinition(io::Printer* p) {
           }
           $arena_dtor$;
           const $superclass$::ClassData* GetClassData() const PROTOBUF_FINAL;
+          static void* PlacementNew(const void*, void* mem, ::$proto_ns$::Arena* arena);
+          static constexpr auto InternalNewImpl_();
           static const $superclass$::$classdata_type$ _class_data_;
 
          public:
@@ -3655,7 +3659,107 @@ void MessageGenerator::GenerateSwap(io::Printer* p) {
   format("}\n");
 }
 
+NewOp MessageGenerator::GetNewOp() const {
+  NewOp op{};
+
+  // We have to select the "worse" operation for any field in the message.
+  // The operations are ordered by numeric value, so we only need to get the
+  // `max` one.
+
+  if (NeedsArenaDestructor() == ArenaDtorNeeds::kRequired) {
+    // We can't skip the ArenaDtor for these messages.
+    op = std::max(op, NewOp::kConstructor);
+  }
+
+  if (descriptor_->extension_range_count() > 0) {
+    op = std::max(op, NewOp::kMemcpyWithArena);
+  }
+
+  if (num_weak_fields_ != 0) {
+    op = std::max(op, NewOp::kConstructor);
+  }
+
+  for (const FieldDescriptor* field : FieldRange(descriptor_)) {
+    if (ShouldSplit(field, options_)) {
+      op = std::max(op, NewOp::kMemcpy);
+    } else if (field->real_containing_oneof() != nullptr) {
+      op = std::max(op, NewOp::kZeroInit);
+    } else if (field->is_repeated() || field->is_map()) {
+      op = std::max(op, NewOp::kMemcpyWithArena);
+    } else {
+      const auto& generator = field_generators_.get(field);
+      if (generator.has_trivial_zero_default()) {
+        op = std::max(op, NewOp::kZeroInit);
+      } else {
+        switch (field->cpp_type()) {
+          case FieldDescriptor::CPPTYPE_INT32:
+          case FieldDescriptor::CPPTYPE_INT64:
+          case FieldDescriptor::CPPTYPE_UINT32:
+          case FieldDescriptor::CPPTYPE_UINT64:
+          case FieldDescriptor::CPPTYPE_DOUBLE:
+          case FieldDescriptor::CPPTYPE_FLOAT:
+          case FieldDescriptor::CPPTYPE_BOOL:
+          case FieldDescriptor::CPPTYPE_ENUM:
+            op = std::max(op, NewOp::kMemcpy);
+            break;
+
+          case FieldDescriptor::CPPTYPE_STRING:
+            switch (internal::cpp::EffectiveStringCType(field)) {
+              case FieldOptions::STRING_PIECE:
+                op = std::max(op, NewOp::kMemcpyWithArena);
+                break;
+              case FieldOptions::CORD:
+                op = std::max(op, NewOp::kZeroInit);
+                break;
+              case FieldOptions::STRING:
+                op = std::max(op, NewOp::kMemcpy);
+                break;
+              default:
+                ABSL_LOG(FATAL);
+            }
+            break;
+          case FieldDescriptor::CPPTYPE_MESSAGE:
+            ABSL_DCHECK(IsLazy(field, options_, scc_analyzer_));
+            op = std::max(op, NewOp::kMemcpy);
+            break;
+        }
+      }
+    }
+  }
+
+  return op;
+}
+
 void MessageGenerator::GenerateClassData(io::Printer* p) {
+  switch (GetNewOp()) {
+    case NewOp::kZeroInit:
+      p->Emit(R"cc(
+        constexpr auto $classname$::InternalNewImpl_() {
+          return $pbi$::PlacementNew::ZeroInit();
+        }
+      )cc");
+      break;
+    case NewOp::kMemcpy:
+      p->Emit(R"cc(
+        constexpr auto $classname$::InternalNewImpl_() {
+          return $pbi$::PlacementNew::Memcpy();
+        }
+      )cc");
+      break;
+    case NewOp::kMemcpyWithArena:
+      // Not supported yet, use constructor.
+    case NewOp::kConstructor:
+      p->Emit(R"cc(
+        void* $classname$::PlacementNew(const void*, void* mem,
+                                        ::$proto_ns$::Arena* arena) {
+          return ::new (mem) $classname$(arena);
+        }
+        constexpr auto $classname$::InternalNewImpl_() {
+          return $pbi$::PlacementNew(&$classname$::PlacementNew);
+        }
+      )cc");
+      break;
+  }
   const auto on_demand_register_arena_dtor = [&] {
     if (NeedsArenaDestructor() == ArenaDtorNeeds::kOnDemand) {
       p->Emit(R"cc(
@@ -3745,11 +3849,12 @@ void MessageGenerator::GenerateClassData(io::Printer* p) {
                       $on_demand_register_arena_dtor$,
                       $is_initialized$,
                       &$classname$::MergeImpl,
+                      $superclass$::GetNewImpl<$classname$>(),
 #if defined(PROTOBUF_CUSTOM_VTABLE)
                       $superclass$::GetDeleteImpl<$classname$>(),
-                      $superclass$::GetNewImpl<$classname$>(),
                       $custom_vtable_methods$,
 #endif  // PROTOBUF_CUSTOM_VTABLE
+                      sizeof($classname$),
                       PROTOBUF_FIELD_OFFSET($classname$, $cached_size$),
                       false,
                   },
@@ -3782,11 +3887,12 @@ void MessageGenerator::GenerateClassData(io::Printer* p) {
                       $on_demand_register_arena_dtor$,
                       $is_initialized$,
                       &$classname$::MergeImpl,
+                      $superclass$::GetNewImpl<$classname$>(),
 #if defined(PROTOBUF_CUSTOM_VTABLE)
                       $superclass$::GetDeleteImpl<$classname$>(),
-                      $superclass$::GetNewImpl<$classname$>(),
                       $custom_vtable_methods$,
 #endif  // PROTOBUF_CUSTOM_VTABLE
+                      sizeof($classname$),
                       PROTOBUF_FIELD_OFFSET($classname$, $cached_size$),
                       true,
                   },

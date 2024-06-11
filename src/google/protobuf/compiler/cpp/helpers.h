@@ -41,6 +41,24 @@ namespace protobuf {
 namespace compiler {
 namespace cpp {
 enum class ArenaDtorNeeds { kNone = 0, kOnDemand = 1, kRequired = 2 };
+// Order matters. Greater values are more restrictive.
+enum class NewOp : uint8_t {
+  // Fields that are initialized with zeros.
+  // This includes scalar types with a default of zero, but also fields
+  // initialized to null like singular message fields.
+  kZeroInit = 0,
+  // Fields that can be initialized as a memcpy from the default instance.
+  // On top of any kZeroInit field, this included scalars with non-zero default,
+  // string fields (that are initialized to some global default), the split
+  // field, etc.
+  kMemcpy = 1,
+  // These fields can be initialized with a memcpy, except for the fact that we
+  // would need to update arena pointers. Eg RepeatedField
+  kMemcpyWithArena = 2,
+  // These don't fall into any of the categories above and require a full call
+  // of the constructor.
+  kConstructor = 3
+};
 
 inline absl::string_view ProtobufNamespace(const Options& opts) {
   // This won't be transformed by copybara, since copybara looks for google::protobuf::.
