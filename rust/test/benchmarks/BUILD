@@ -5,7 +5,7 @@ load(
 )
 load("//bazel:cc_proto_library.bzl", "cc_proto_library")
 load(
-    "//protos/bazel:upb_cc_proto_library.bzl",
+    "//hpb/bazel:upb_cc_proto_library.bzl",
     "upb_cc_proto_library",
 )
 load(
@@ -48,11 +48,11 @@ cc_test(
         ":bench_data_upb_cc_proto",
         ":benchmarks",
         ":proto_benchmarks_cpp",  # build_cleaner: keep
-        "//protos",
-        "//protos:repeated_field",
         "//src/google/protobuf:protobuf_lite",
         "//testing/base/public:gunit",
         "//third_party/benchmark",
+        "//third_party/upb/protos",
+        "//third_party/upb/protos:repeated_field",
         "@com_google_absl//absl/log:absl_check",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
@@ -69,11 +69,11 @@ cc_test(
         ":bench_data_upb_cc_proto",
         ":benchmarks",
         ":proto_benchmarks_upb",  # build_cleaner: keep
-        "//protos",
-        "//protos:repeated_field",
         "//src/google/protobuf:protobuf_lite",
         "//testing/base/public:gunit",
         "//third_party/benchmark",
+        "//third_party/upb/protos",
+        "//third_party/upb/protos:repeated_field",
         "@com_google_absl//absl/log:absl_check",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
